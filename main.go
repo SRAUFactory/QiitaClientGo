@@ -74,7 +74,7 @@ func main() {
 	err := json.Unmarshal(byteArray, &items)
 	fmt.Println(err)
 	for key, value := range items {
-		fmt.Println(key, value.Title, value.UpdatedAt)
+		fmt.Println(key, value.Title, value.Tags, value.Url, value.UpdatedAt)
 	}
 
 }
