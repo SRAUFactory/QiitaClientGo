@@ -32,6 +32,12 @@ type Item struct {
 	User      User
 }
 
+func errorHandler(err error) {
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
 func main() {
 	url := "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
 
@@ -46,7 +52,9 @@ func main() {
 
 	var items []Item
 	err := json.Unmarshal(byteArray, &items)
-	fmt.Println(err)
+	errorHandler(err)
+
 	output, err := json.Marshal(items)
+	errorHandler(err)
 	fmt.Println(string(output))
 }
