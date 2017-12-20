@@ -47,5 +47,6 @@ func main() {
 	var items []Item
 	err := json.Unmarshal(byteArray, &items)
 	fmt.Println(err)
-	fmt.Println(items)
+	output, err := json.Marshal(items)
+	fmt.Println(string(output))
 }
