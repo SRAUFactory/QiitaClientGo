@@ -22,14 +22,16 @@ type User struct {
 }
 
 type Item struct {
-	CreatedAt string `json:"created_at"`
-	Id        string
-	Private   bool
-	Tags      []Tag
-	Title     string
-	UpdatedAt string `json:"updated_at"`
-	Url       string
-	User      User
+	CreatedAt     string `json:"created_at"`
+	CommentsCount int    `json:"comments_count"`
+	Id            string
+	LikesCount    int `json:"likes_count"`
+	Private       bool
+	Tags          []Tag
+	Title         string
+	UpdatedAt     string `json:"updated_at"`
+	Url           string
+	User          User
 }
 
 func errorHandler(err error) {
