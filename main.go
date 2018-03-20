@@ -36,8 +36,12 @@ type Item struct {
 
 func errorHandler(err error) {
 	if err != nil {
-		fmt.Println(err)
+		outputResult(err)
 	}
+}
+
+func outputResult(result interface{}) {
+	fmt.Println(result)
 }
 
 func main() {
@@ -58,5 +62,5 @@ func main() {
 
 	output, err := json.Marshal(items)
 	errorHandler(err)
-	fmt.Println(string(output))
+	outputResult(string(output))
 }
