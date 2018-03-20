@@ -40,6 +40,8 @@ var (
 	outputFile = flag.String("f", "./qiita.json", "Set output file path.")
 )
 
+const QIITA_URL = "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
+
 func errorHandler(err error) {
 	if err != nil {
 		fmt.Println(err)
@@ -58,9 +60,8 @@ func outputResult(result []byte) {
 
 func main() {
 	flag.Parse()
-	url := "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", QIITA_URL, nil)
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("QIITA_API_TOKEN"))
 
 	client := new(http.Client)
