@@ -40,7 +40,7 @@ var (
 	outputFile = flag.String("f", "./qiita.json", "Set output file path.")
 )
 
-const QiitaUrl = "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
+const QiitaURL = "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
 
 func errorHandler(err error) {
 	if err != nil {
