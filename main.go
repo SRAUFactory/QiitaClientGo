@@ -37,24 +37,27 @@ type Item struct {
 
 var (
 	outputType = flag.String("t", "stdout", "Invalid value are 'stdout', 'file' only.")
-	outputFile = flag.String("f", "qiita.json", "Set output file path.")
+	outputFile = flag.String("f", "./qiita.json", "Set output file path.")
 )
 
 func errorHandler(err error) {
 	if err != nil {
-		outputResult(err)
+		fmt.Println(err)
 	}
 }
 
-func outputResult(result interface{}) {
-	fmt.Println(result)
+func outputResult(result []byte) {
+	if *outputType == "file" {
+		file, _ := os.Create(*outputFile)
+		defer file.Close()
+		file.Write(result)
+		return
+	}
+	fmt.Println(string(result))
 }
 
 func main() {
 	flag.Parse()
-	outputResult(*outputType)
-	outputResult(*outputFile)
-
 	url := "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -72,5 +75,5 @@ func main() {
 
 	output, err := json.Marshal(items)
 	errorHandler(err)
-	outputResult(string(output))
+	outputResult(output)
 }
