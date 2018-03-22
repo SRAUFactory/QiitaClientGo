@@ -56,24 +56,33 @@ func outputResult(result []byte) {
 	fmt.Println(string(result))
 }
 
-func main() {
-	flag.Parse()
+func getQiitaData() []byte {
 	url := "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
-
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("QIITA_API_TOKEN"))
 
 	client := new(http.Client)
 	resp, _ := client.Do(req)
 	defer resp.Body.Close()
-
 	byteArray, _ := ioutil.ReadAll(resp.Body)
 
+	return byteArray
+}
+
+func convertJSONData(byteArray []byte) []byte {
 	var items []Item
 	err := json.Unmarshal(byteArray, &items)
 	errorHandler(err)
 
-	output, err := json.Marshal(items)
+	result, err := json.Marshal(items)
 	errorHandler(err)
+
+	return result
+}
+
+func main() {
+	flag.Parse()
+	byteArray := getQiitaData()
+	output := convertJSONData(byteArray)
 	outputResult(output)
 }
