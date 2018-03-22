@@ -69,16 +69,20 @@ func getQiitaData() []byte {
 	return byteArray
 }
 
-func main() {
-	flag.Parse()
-
-	byteArray := getQiitaData()
-
+func convertJsonData(byteArray []byte) []byte {
 	var items []Item
 	err := json.Unmarshal(byteArray, &items)
 	errorHandler(err)
 
-	output, err := json.Marshal(items)
+	result, err := json.Marshal(items)
 	errorHandler(err)
+
+	return result
+}
+
+func main() {
+	flag.Parse()
+	byteArray := getQiitaData()
+	output := convertJsonData(byteArray)
 	outputResult(output)
 }
