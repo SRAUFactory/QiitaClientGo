@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -34,13 +35,29 @@ type Item struct {
 	User          User
 }
 
+var (
+	outputType = flag.String("t", "stdout", "Invalid value are 'stdout', 'file' only.")
+	outputFile = flag.String("f", "./qiita.json", "Set output file path.")
+)
+
 func errorHandler(err error) {
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
+func outputResult(result []byte) {
+	if *outputType == "file" {
+		file, _ := os.Create(*outputFile)
+		defer file.Close()
+		file.Write(result)
+		return
+	}
+	fmt.Println(string(result))
+}
+
 func main() {
+	flag.Parse()
 	url := "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -58,5 +75,5 @@ func main() {
 
 	output, err := json.Marshal(items)
 	errorHandler(err)
-	fmt.Println(string(output))
+	outputResult(output)
 }
