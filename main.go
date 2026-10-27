@@ -1,140 +1,72 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
 	"fmt"
-	"io" // io/ioutil の代わりに io パッケージを使用
-	"net/http"
 	"os"
 )
 
-type Tag struct {
-	Name string
-}
-
-type User struct {
-	Description     string `json:"description"`
-	Location        string `json:"location"`
-	Name            string `json:"name"`
-	Organization    string `json:"organization"`
-	ProfileImageUrl string `json:"profile_image_url"`
-	WebsiteUrl      string `json:"website_url"`
-}
-
-// structタグに合わせてフィールド名を修正（omitemptyなども考慮する場合があるが、今回は元の構造を維持）
-type Item struct {
-	CreatedAt     string `json:"created_at"`
-	CommentsCount int    `json:"comments_count"`
-	Id            string
-	LikesCount    int `json:"likes_count"`
-	Private       bool
-	Tags          []Tag
-	Title         string
-	UpdatedAt     string `json:"updated_at"`
-	Url           string
-	User          User
-}
-
 var (
-	outputType = flag.String("t", "stdout", "Invalid value are 'stdout', 'file' only.")
-	outputFile = flag.String("f", "./qiita.json", "Set output file path.")
+	// Version is set at build time or defaults to 1.0.0
+	Version = "1.0.0"
 )
 
-// エラーハンドリング関数は、直接エラーをログ出力し、呼び出し元で処理を止めさせる形に修正または単純化することが望ましい。
-// 今回は、致命的なエラーをログ出力する形に調整。
-func errorHandler(err error) {
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-	}
-}
+func printUsage() {
+	usage := `qiita-client is a CLI tool for syncing Markdown articles with Qiita.
 
-func outputResult(result []byte) {
-	if *outputType == "file" {
-		// エラーを無視せず、適切にチェックする
-		file, err := os.Create(*outputFile)
-		if err != nil {
-			fmt.Printf("Error creating file: %v\n", err)
-			return
-		}
-		defer file.Close()
+Usage:
+  qiita-client <command> [options] [arguments]
 
-		// Writeの戻り値(N, err)もチェックする
-		_, writeErr := file.Write(result)
-		if writeErr != nil {
-			fmt.Printf("Error writing to file: %v\n", writeErr)
-		}
-		return
-	}
-	fmt.Println(string(result))
-}
+Available Commands:
+  fetch       Fetch articles from Qiita and save as Markdown files with YAML frontmatter
+  push        Publish or update Markdown files to Qiita
+  diff        Detect changed Markdown files using git diff
+  version     Show version information
+  help        Show this help message
 
-// getQiitaData は、エラーを返すようにシグネチャを変更
-func getQiitaData() ([]byte, error) {
-	url := "https://qiita.com/api/v2/authenticated_user/items?page=1&per_page=100"
+Authentication:
+  Set the QIITA_TOKEN environment variable with your personal access token.
 
-	// 1. http.NewRequestのエラーをチェック
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("http requestの作成に失敗しました: %w", err)
-	}
+Examples:
+  # Fetch all articles into ./qiita directory
+  export QIITA_TOKEN="your_token_here"
+  qiita-client fetch -dir qiita
 
-	req.Header.Set("Authorization", "Bearer "+os.Getenv("QIITA_API_TOKEN"))
+  # Detect changed files and push them to Qiita
+  qiita-client diff -dir qiita | qiita-client push
 
-	client := &http.Client{}
+  # Push specific markdown files
+  qiita-client push qiita/my-article.md
 
-	// 2. client.Do(req) のエラーをチェック
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("httpリクエストの実行に失敗しました: %w", err)
-	}
-	// リソース解放処理は、必ずrespがnilでないことを保証してから行うべき
-	defer resp.Body.Close()
-
-	// 3. ioutil.ReadAll の代わりに io.ReadAll を使用し、エラーをチェック
-	byteArray, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("レスポンスボディの読み取りに失敗しました: %w", err)
-	}
-
-	return byteArray, nil
-}
-
-// convertJSONData もエラーを返すようにシグネチャを変更
-func convertJSONData(byteArray []byte) ([]byte, error) {
-	var items []Item
-
-	// JSONパース時のエラーチェック
-	err := json.Unmarshal(byteArray, &items)
-	if err != nil {
-		return nil, fmt.Errorf("JSONデータ解析に失敗しました: %w", err)
-	}
-
-	// JSONマーシャリング時のエラーチェック
-	result, err := json.Marshal(items)
-	if err != nil {
-		return nil, fmt.Errorf("JSONデータ変換に失敗しました: %w", err)
-	}
-
-	return result, nil
+Run 'qiita-client <command> -h' for more information on a command.
+`
+	fmt.Print(usage)
 }
 
 func main() {
-	flag.Parse()
-
-	// getQiitaData からエラーを捕捉する
-	byteArray, err := getQiitaData()
-	if err != nil {
-		fmt.Printf("致命的なエラー: データ取得に失敗しました。\n%v\n", err)
-		return
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(1)
 	}
 
-	// convertJSONData からエラーを捕捉する
-	output, err := convertJSONData(byteArray)
-	if err != nil {
-		fmt.Printf("致命的なエラー: データ処理に失敗しました。\n%v\n", err)
-		return
-	}
+	command := os.Args[1]
+	args := os.Args[2:]
 
-	outputResult(output)
+	switch command {
+	case "fetch":
+		os.Exit(RunFetchCommand(args, os.Stdout, os.Stderr))
+	case "push":
+		os.Exit(RunPushCommand(args, os.Stdin, os.Stdout, os.Stderr))
+	case "diff":
+		os.Exit(RunDiffCommand(args, os.Stdout, os.Stderr))
+	case "version", "-v", "--version":
+		fmt.Printf("qiita-client version %s\n", Version)
+		os.Exit(0)
+	case "help", "-h", "--help":
+		printUsage()
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", command)
+		printUsage()
+		os.Exit(1)
+	}
 }

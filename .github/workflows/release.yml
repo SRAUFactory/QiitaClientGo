@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Go
+        uses: actions/setup-go@304758201b33364f7b6070a256a4823a07804968 # v5.5.0
+        with:
+          go-version: '1.26'
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build and package binaries
+        run: |
+          mkdir -p dist
+          TAG="${GITHUB_REF_NAME:-v1.0.0}"
+
+          TARGETS=(
+            "linux/amd64"
+            "linux/arm64"
+            "darwin/amd64"
+            "darwin/arm64"
+          )
+
+          for TARGET in "${TARGETS[@]}"; do
+            OS="${TARGET%%/*}"
+            ARCH="${TARGET##*/}"
+            OUT_NAME="qiita-client"
+            ARCHIVE_NAME="qiita-client_${TAG}_${OS}_${ARCH}.tar.gz"
+
+            echo "Building for ${OS}/${ARCH}..."
+            GOOS="${OS}" GOARCH="${ARCH}" CGO_ENABLED=0 go build \
+              -ldflags "-s -w -X main.Version=${TAG}" \
+              -o "dist/${OUT_NAME}" .
+
+            tar -czf "dist/${ARCHIVE_NAME}" -C dist "${OUT_NAME}" README.md
+            rm -f "dist/${OUT_NAME}"
+          done
+
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+          cd ..
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME:-v1.0.0}"
+          gh release create "${TAG}" dist/* \
+            --title "Release ${TAG}" \
+            --generate-notes
