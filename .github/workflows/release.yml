@@ -3,8 +3,12 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "リリースするタグ (例: v1.0.0)"
+        required: true
 
 permissions:
   contents: write
@@ -12,14 +16,21 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Checkout repository
+        # TODO: Node.js 20 非推奨警告の解消のため、新しいメジャーバージョンのSHAへ更新する
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Setup Go
+        # TODO: 同上。新しいメジャーバージョンのSHAへ更新する
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
+          cache: false # 外部依存なし (go.sum 無し) のためキャッシュ無効
 
       - name: Run tests
         run: go test -v ./...
@@ -27,7 +38,6 @@ jobs:
       - name: Build and package binaries
         run: |
           mkdir -p dist
-          TAG="${GITHUB_REF_NAME:-v1.0.0}"
 
           TARGETS=(
             "linux/amd64"
@@ -47,7 +57,8 @@ jobs:
               -ldflags "-s -w -X main.Version=${TAG}" \
               -o "dist/${OUT_NAME}" .
 
-            tar -czf "dist/${ARCHIVE_NAME}" -C dist "${OUT_NAME}" README.md
+            # -C dist は以降の全ファイルに効くため、README.md はルートへ戻して指定する
+            tar -czf "dist/${ARCHIVE_NAME}" -C dist "${OUT_NAME}" -C "${GITHUB_WORKSPACE}" README.md
             rm -f "dist/${OUT_NAME}"
           done
 
@@ -60,7 +71,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME:-v1.0.0}"
           gh release create "${TAG}" dist/* \
             --title "Release ${TAG}" \
-            --generate-notes
+            --generate-notes \
+            --verify-tag
