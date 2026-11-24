@@ -117,8 +117,13 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 		return nil, fmt.Errorf("failed to create directory %s: %w", opts.Dir, err)
 	}
 
+	type localFileInfo struct {
+		path      string
+		updatedAt string
+	}
+
 	// Map existing local files
-	idToFile := make(map[string]string)
+	idToFile := make(map[string]localFileInfo)
 	titleToFile := make(map[string]string)
 
 	_ = filepath.WalkDir(opts.Dir, func(path string, d fs.DirEntry, err error) error {
@@ -137,7 +142,10 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 		}
 
 		if fm.QiitaID != "" {
-			idToFile[fm.QiitaID] = path
+			idToFile[fm.QiitaID] = localFileInfo{
+				path:      path,
+				updatedAt: fm.UpdatedAt,
+			}
 		} else {
 			stem := strings.TrimSuffix(filepath.Base(path), ".md")
 			titleToFile[stem] = path
@@ -162,17 +170,13 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 		}
 
 		var targetPath string
-		if existingPath, ok := idToFile[item.ID]; ok {
+		if localInfo, ok := idToFile[item.ID]; ok {
 			// Check updated_at
-			content, readErr := os.ReadFile(existingPath)
-			if readErr == nil {
-				existingFm, _, parseErr := ParseMarkdown(string(content))
-				if parseErr == nil && existingFm.UpdatedAt == item.UpdatedAt {
-					fmt.Fprintf(stdout, "  Skip (no change): %s\n", item.Title)
-					continue
-				}
+			if localInfo.updatedAt == item.UpdatedAt {
+				fmt.Fprintf(stdout, "  Skip (no change): %s\n", item.Title)
+				continue
 			}
-			targetPath = existingPath
+			targetPath = localInfo.path
 			fmt.Fprintf(stdout, "  Update: %s\n", item.Title)
 		} else if existingPath, ok := titleToFile[item.Title]; ok {
 			targetPath = existingPath
