@@ -130,9 +130,10 @@ func (c *QiitaClient) do(method, path string, in, out any) error {
 func (c *QiitaClient) FetchAllAuthenticatedUserItems() ([]QiitaItem, error) {
 	var allItems []QiitaItem
 	page := 1
+	const perPage = 100
 
 	for {
-		path := fmt.Sprintf("/authenticated_user/items?page=%d&per_page=100", page)
+		path := fmt.Sprintf("/authenticated_user/items?page=%d&per_page=%d", page, perPage)
 		var items []QiitaItem
 		if err := c.do(http.MethodGet, path, nil, &items); err != nil {
 			return nil, fmt.Errorf("failed to fetch page %d: %w", page, err)
@@ -143,6 +144,11 @@ func (c *QiitaClient) FetchAllAuthenticatedUserItems() ([]QiitaItem, error) {
 		}
 
 		allItems = append(allItems, items...)
+
+		if len(items) < perPage {
+			break
+		}
+
 		page++
 	}
 

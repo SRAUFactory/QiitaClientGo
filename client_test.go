@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,23 +22,25 @@ func TestQiitaClient_FetchAllAuthenticatedUserItems(t *testing.T) {
 		pageCalls++
 
 		if page == "1" {
-			items := []QiitaItem{
-				{ID: "item1", Title: "Article 1", UpdatedAt: "2026-10-01T00:00:00Z"},
-				{ID: "item2", Title: "Article 2", UpdatedAt: "2026-10-02T00:00:00Z"},
+			// Exactly 100 items on page 1
+			items := make([]QiitaItem, 100)
+			for i := 0; i < 100; i++ {
+				items[i] = QiitaItem{ID: fmt.Sprintf("item-%d", i+1)}
 			}
 			_ = json.NewEncoder(w).Encode(items)
 			return
 		}
 
 		if page == "2" {
+			// 1 item on page 2 (< 100, terminates pagination)
 			items := []QiitaItem{
-				{ID: "item3", Title: "Article 3", UpdatedAt: "2026-10-03T00:00:00Z"},
+				{ID: "item-101", Title: "Article 101"},
 			}
 			_ = json.NewEncoder(w).Encode(items)
 			return
 		}
 
-		// Page 3: empty, ends pagination
+		// Page 3: should not be reached
 		_ = json.NewEncoder(w).Encode([]QiitaItem{})
 	}))
 	defer ts.Close()
@@ -48,14 +51,54 @@ func TestQiitaClient_FetchAllAuthenticatedUserItems(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(items) != 3 {
-		t.Fatalf("expected 3 items, got %d", len(items))
+	if len(items) != 101 {
+		t.Fatalf("expected 101 items, got %d", len(items))
 	}
-	if items[0].ID != "item1" || items[2].ID != "item3" {
-		t.Errorf("unexpected items content: %#v", items)
+	if items[0].ID != "item-1" || items[100].ID != "item-101" {
+		t.Errorf("unexpected items content")
 	}
-	if pageCalls != 3 {
-		t.Errorf("expected 3 page requests, got %d", pageCalls)
+	if pageCalls != 2 {
+		t.Errorf("expected 2 page requests, got %d", pageCalls)
+	}
+}
+
+func TestQiitaClient_FetchAllPaginationBoundary(t *testing.T) {
+	pageCalls := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		pageCalls++
+
+		if page == "1" {
+			// Exactly 100 items
+			items := make([]QiitaItem, 100)
+			for i := 0; i < 100; i++ {
+				items[i] = QiitaItem{ID: fmt.Sprintf("item-%d", i)}
+			}
+			_ = json.NewEncoder(w).Encode(items)
+			return
+		}
+
+		if page == "2" {
+			// Empty page to terminate
+			_ = json.NewEncoder(w).Encode([]QiitaItem{})
+			return
+		}
+
+		t.Errorf("unexpected page %s requested", page)
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("test-token", ts.URL, 5*time.Second)
+	items, err := client.FetchAllAuthenticatedUserItems()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(items) != 100 {
+		t.Fatalf("expected 100 items, got %d", len(items))
+	}
+	if pageCalls != 2 {
+		t.Errorf("expected 2 page requests, got %d", pageCalls)
 	}
 }
 
