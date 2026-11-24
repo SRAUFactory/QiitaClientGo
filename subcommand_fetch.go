@@ -125,6 +125,7 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 	// Map existing local files
 	idToFile := make(map[string]localFileInfo)
 	titleToFile := make(map[string]string)
+	occupiedPaths := make(map[string]string) // path -> qiita_id
 
 	err = filepath.WalkDir(opts.Dir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -135,26 +136,30 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 			return nil
 		}
 
-		content, readErr := os.ReadFile(path)
+		cleanPath := filepath.Clean(path)
+
+		content, readErr := os.ReadFile(cleanPath)
 		if readErr != nil {
-			fmt.Fprintf(stderr, "  WARNING: Failed to read %s: %v\n", path, readErr)
+			fmt.Fprintf(stderr, "  WARNING: Failed to read %s: %v\n", cleanPath, readErr)
 			return nil
 		}
 
 		fm, _, parseErr := ParseMarkdown(string(content))
 		if parseErr != nil {
-			fmt.Fprintf(stderr, "  WARNING: Failed to parse frontmatter in %s: %v\n", path, parseErr)
+			fmt.Fprintf(stderr, "  WARNING: Failed to parse frontmatter in %s: %v\n", cleanPath, parseErr)
 			return nil
 		}
 
+		occupiedPaths[cleanPath] = fm.QiitaID
+
 		if fm.QiitaID != "" {
 			idToFile[fm.QiitaID] = localFileInfo{
-				path:      path,
+				path:      cleanPath,
 				updatedAt: fm.UpdatedAt,
 			}
 		} else {
-			stem := strings.TrimSuffix(filepath.Base(path), ".md")
-			titleToFile[stem] = path
+			stem := strings.TrimSuffix(filepath.Base(cleanPath), ".md")
+			titleToFile[stem] = cleanPath
 		}
 		return nil
 	})
@@ -190,15 +195,31 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 		} else if existingPath, ok := titleToFile[item.Title]; ok {
 			targetPath = existingPath
 			fmt.Fprintf(stdout, "  Initial link by title: %s\n", item.Title)
+			delete(titleToFile, item.Title)
 		} else {
 			safeTitle := SanitizeFilename(item.Title)
-			candidate := filepath.Join(opts.Dir, safeTitle+".md")
+			candidate := filepath.Clean(filepath.Join(opts.Dir, safeTitle+".md"))
+
+			// Check collision with already occupied paths by other articles
+			if existingOwner, occupied := occupiedPaths[candidate]; occupied && existingOwner != item.ID {
+				// Collision detected: fallback to <safeTitle>-<qiita_id>.md
+				suffixCandidate := filepath.Clean(filepath.Join(opts.Dir, fmt.Sprintf("%s-%s.md", safeTitle, item.ID)))
+				fmt.Fprintf(stdout, "  Filename collision for %s; using %s\n", candidate, suffixCandidate)
+				candidate = suffixCandidate
+			}
+
 			if !IsPathSafe(opts.Dir, candidate) {
 				fmt.Fprintf(stderr, "  WARNING: Skipping unsafe path for article: %s\n", item.Title)
 				continue
 			}
 			targetPath = candidate
 			fmt.Fprintf(stdout, "  New file: %s\n", targetPath)
+		}
+
+		occupiedPaths[targetPath] = item.ID
+		idToFile[item.ID] = localFileInfo{
+			path:      targetPath,
+			updatedAt: item.UpdatedAt,
 		}
 
 		formatted := FormatMarkdown(fm, item.Body)

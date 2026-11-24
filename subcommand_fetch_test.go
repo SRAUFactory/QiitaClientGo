@@ -158,3 +158,75 @@ func TestExecuteFetch_CorruptedFrontmatterWarning(t *testing.T) {
 	// Should not crash and should log warning
 	// (Note: ParseMarkdown handles most cases gracefully or returns error)
 }
+
+func TestExecuteFetch_SameTitleCollision(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "fetch-collision-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	mockItems := []QiitaItem{
+		{
+			ID:        "item-1",
+			Title:     "重複タイトル",
+			Body:      "Body 1",
+			Private:   false,
+			Tags:      []QiitaTag{{Name: "Go"}},
+			UpdatedAt: "2026-10-27T12:00:00Z",
+		},
+		{
+			ID:        "item-2",
+			Title:     "重複タイトル",
+			Body:      "Body 2",
+			Private:   false,
+			Tags:      []QiitaTag{{Name: "Go"}},
+			UpdatedAt: "2026-10-27T12:00:00Z",
+		},
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "1" {
+			_ = json.NewEncoder(w).Encode(mockItems)
+		} else {
+			_ = json.NewEncoder(w).Encode([]QiitaItem{})
+		}
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("dummy-token", ts.URL, 5*time.Second)
+	var stdout, stderr bytes.Buffer
+
+	updated, err := ExecuteFetch(client, FetchOptions{Dir: tempDir}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("ExecuteFetch failed: %v", err)
+	}
+
+	if len(updated) != 2 {
+		t.Fatalf("expected 2 updated files, got %d: %v", len(updated), updated)
+	}
+
+	file1 := filepath.Join(tempDir, "重複タイトル.md")
+	file2 := filepath.Join(tempDir, "重複タイトル-item-2.md")
+
+	if _, err := os.Stat(file1); err != nil {
+		t.Errorf("expected %s to exist: %v", file1, err)
+	}
+	if _, err := os.Stat(file2); err != nil {
+		t.Errorf("expected %s to exist: %v", file2, err)
+	}
+
+	// Verify bodies are distinct
+	c1, _ := os.ReadFile(file1)
+	c2, _ := os.ReadFile(file2)
+	fm1, _, _ := ParseMarkdown(string(c1))
+	fm2, _, _ := ParseMarkdown(string(c2))
+
+	if fm1.QiitaID != "item-1" {
+		t.Errorf("file1 qiita_id = %s, want item-1", fm1.QiitaID)
+	}
+	if fm2.QiitaID != "item-2" {
+		t.Errorf("file2 qiita_id = %s, want item-2", fm2.QiitaID)
+	}
+}
