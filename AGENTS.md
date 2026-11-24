@@ -71,7 +71,7 @@ Markdownの先頭に、次のフィールドを持つYAML Frontmatterを置き�
 
 リリースは、`v*` 形式のタグをpushすると `.github/workflows/release.yml` が起動して行われます。
 
-- タグの作成・付け直しは、Skill `git-release-tag`(`.claude/skills/git-release-tag/SKILL.md`)の手順に従う。
+- タグの作成・付け直しは、Skill `git-release-tag`(`.agents/skills/git-release-tag/SKILL.md`)の手順に従う。
 - タグのpushでリリースが走るため、**ユーザーの明示的な承認なしにタグをpushしない**。
 - ワークフローは、タグが指すコミットの内容で動く。ワークフローを修正した場合は、修正を含むコミットにタグを付け直す。
 - ビルド対象は linux/amd64、linux/arm64、darwin/amd64、darwin/arm64。アーカイブ名は `qiita-client_<tag>_<os>_<arch>.tar.gz`。
