@@ -66,37 +66,58 @@ func NewQiitaClient(token string, baseURL string, timeout time.Duration) *QiitaC
 	}
 }
 
+// do executes an HTTP request, handles headers, status checking, and JSON encoding/decoding.
+func (c *QiitaClient) do(method, path string, in, out any) error {
+	var bodyReader io.Reader
+	if in != nil {
+		payload, err := json.Marshal(in)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request body for %s %s: %w", method, path, err)
+		}
+		bodyReader = bytes.NewReader(payload)
+	}
+
+	url := fmt.Sprintf("%s%s", c.baseURL, path)
+	req, err := http.NewRequest(method, url, bodyReader)
+	if err != nil {
+		return fmt.Errorf("failed to create request for %s %s: %w", method, path, err)
+	}
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request for %s %s: %w", method, path, err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body for %s %s: %w", method, path, err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("request %s %s failed with status %d: %s", method, path, resp.StatusCode, string(bodyBytes))
+	}
+
+	if out != nil {
+		if err := json.Unmarshal(bodyBytes, out); err != nil {
+			return fmt.Errorf("failed to parse JSON response for %s %s: %w", method, path, err)
+		}
+	}
+
+	return nil
+}
+
 // FetchAllAuthenticatedUserItems retrieves all articles of the authenticated user with pagination.
 func (c *QiitaClient) FetchAllAuthenticatedUserItems() ([]QiitaItem, error) {
 	var allItems []QiitaItem
 	page := 1
 
 	for {
-		url := fmt.Sprintf("%s/authenticated_user/items?page=%d&per_page=100", c.baseURL, page)
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create request for page %d: %w", page, err)
-		}
-		c.setHeaders(req)
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch page %d: %w", page, err)
-		}
-
-		bodyBytes, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response body for page %d: %w", page, err)
-		}
-
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("Qiita API returned status %d on page %d: %s", resp.StatusCode, page, string(bodyBytes))
-		}
-
+		path := fmt.Sprintf("/authenticated_user/items?page=%d&per_page=100", page)
 		var items []QiitaItem
-		if err := json.Unmarshal(bodyBytes, &items); err != nil {
-			return nil, fmt.Errorf("failed to parse JSON response for page %d: %w", page, err)
+		if err := c.do(http.MethodGet, path, nil, &items); err != nil {
+			return nil, fmt.Errorf("failed to fetch page %d: %w", page, err)
 		}
 
 		if len(items) == 0 {
@@ -112,75 +133,20 @@ func (c *QiitaClient) FetchAllAuthenticatedUserItems() ([]QiitaItem, error) {
 
 // CreateItem creates a new Qiita article (POST /items).
 func (c *QiitaClient) CreateItem(reqData QiitaItemRequest) (*QiitaItem, error) {
-	payload, err := json.Marshal(reqData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request data: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/items", c.baseURL)
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create POST request: %w", err)
-	}
-	c.setHeaders(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute POST request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read POST response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("failed to create item (status %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
 	var item QiitaItem
-	if err := json.Unmarshal(bodyBytes, &item); err != nil {
-		return nil, fmt.Errorf("failed to parse created item JSON: %w", err)
+	if err := c.do(http.MethodPost, "/items", reqData, &item); err != nil {
+		return nil, fmt.Errorf("failed to create item: %w", err)
 	}
-
 	return &item, nil
 }
 
 // UpdateItem updates an existing Qiita article (PATCH /items/{id}).
 func (c *QiitaClient) UpdateItem(id string, reqData QiitaItemRequest) (*QiitaItem, error) {
-	payload, err := json.Marshal(reqData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request data: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/items/%s", c.baseURL, id)
-	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create PATCH request: %w", err)
-	}
-	c.setHeaders(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute PATCH request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read PATCH response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("failed to update item (status %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
+	path := fmt.Sprintf("/items/%s", id)
 	var item QiitaItem
-	if err := json.Unmarshal(bodyBytes, &item); err != nil {
-		return nil, fmt.Errorf("failed to parse updated item JSON: %w", err)
+	if err := c.do(http.MethodPatch, path, reqData, &item); err != nil {
+		return nil, fmt.Errorf("failed to update item %s: %w", id, err)
 	}
-
 	return &item, nil
 }
 

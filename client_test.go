@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -137,5 +138,47 @@ func TestQiitaClient_UpdateItem(t *testing.T) {
 
 	if item.Title != "更新記事" {
 		t.Errorf("expected Title '更新記事', got %s", item.Title)
+	}
+}
+
+func TestQiitaClient_ErrorStatus(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"scope required"}`))
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("test-token", ts.URL, 5*time.Second)
+	_, err := client.CreateItem(QiitaItemRequest{Title: "Forbidden test"})
+	if err == nil {
+		t.Fatal("expected error for HTTP 403, got nil")
+	}
+
+	expectedParts := []string{"POST /items", "403", "scope required"}
+	for _, part := range expectedParts {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("expected error message to contain %q, got %q", part, err.Error())
+		}
+	}
+}
+
+func TestQiitaClient_InvalidJSONResponse(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not a valid json`))
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("test-token", ts.URL, 5*time.Second)
+	_, err := client.CreateItem(QiitaItemRequest{Title: "Invalid JSON test"})
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+
+	expectedParts := []string{"POST /items", "failed to parse JSON response"}
+	for _, part := range expectedParts {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("expected error message to contain %q, got %q", part, err.Error())
+		}
 	}
 }
