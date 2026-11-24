@@ -132,3 +132,69 @@ func TestFormatMarkdown(t *testing.T) {
 		t.Errorf("Body changed: got %q, want %q", parsedBody, body)
 	}
 }
+
+func TestFormatMarkdown_RoundTripEscaping(t *testing.T) {
+	tests := []struct {
+		name string
+		fm   Frontmatter
+		body string
+	}{
+		{
+			name: "Quotes in title",
+			fm: Frontmatter{
+				Title: `He said "hi"`,
+				Tags:  []string{"quote"},
+			},
+			body: "Body text\n",
+		},
+		{
+			name: "Newline in title",
+			fm: Frontmatter{
+				Title: "line1\nline2",
+				Tags:  []string{"multiline"},
+			},
+			body: "Body text\n",
+		},
+		{
+			name: "Backslash in title",
+			fm: Frontmatter{
+				Title: `backslash\test`,
+				Tags:  []string{`tag\with\backslash`},
+			},
+			body: "Body text\n",
+		},
+		{
+			name: "Special characters in tags",
+			fm: Frontmatter{
+				Title: "Tag escaping test",
+				Tags:  []string{`"quoted"`, "colon: in tag", "line1\nline2"},
+			},
+			body: "Body text\n",
+		},
+		{
+			name: "Colon and special words",
+			fm: Frontmatter{
+				Title:   "a: b",
+				Tags:    []string{"true", "[draft] memo"},
+				Private: true,
+			},
+			body: "Body text\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatted := FormatMarkdown(tt.fm, tt.body)
+			parsedFm, parsedBody, err := ParseMarkdown(formatted)
+			if err != nil {
+				t.Fatalf("ParseMarkdown failed on formatted markdown:\n%s\nError: %v", formatted, err)
+			}
+			if !reflect.DeepEqual(parsedFm, tt.fm) {
+				t.Errorf("Roundtrip Frontmatter mismatch:\ngot:  %#v\nwant: %#v\nFormatted was:\n%s", parsedFm, tt.fm, formatted)
+			}
+			if parsedBody != tt.body {
+				t.Errorf("Roundtrip Body mismatch:\ngot:  %q\nwant: %q", parsedBody, tt.body)
+			}
+		})
+	}
+}

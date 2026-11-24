@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -96,13 +98,8 @@ func parseYAMLFrontmatter(block string) (Frontmatter, error) {
 			if cleanVal != "" {
 				// Inline list support: [tag1, tag2]
 				if strings.HasPrefix(cleanVal, "[") && strings.HasSuffix(cleanVal, "]") {
-					items := strings.Split(cleanVal[1:len(cleanVal)-1], ",")
-					for _, item := range items {
-						v := cleanValue(item)
-						if v != "" {
-							fm.Tags = append(fm.Tags, v)
-						}
-					}
+					items := parseInlineList(cleanVal)
+					fm.Tags = append(fm.Tags, items...)
 				} else {
 					fm.Tags = append(fm.Tags, cleanVal)
 				}
@@ -118,13 +115,106 @@ func parseYAMLFrontmatter(block string) (Frontmatter, error) {
 
 func cleanValue(val string) string {
 	v := strings.TrimSpace(val)
-	if (strings.HasPrefix(v, "\"") && strings.HasSuffix(v, "\"")) ||
-		(strings.HasPrefix(v, "'") && strings.HasSuffix(v, "'")) {
-		if len(v) >= 2 {
-			v = v[1 : len(v)-1]
+	if strings.HasPrefix(v, "\"") && strings.HasSuffix(v, "\"") && len(v) >= 2 {
+		var out string
+		if err := json.Unmarshal([]byte(v), &out); err == nil {
+			return out
+		}
+		if u, err := strconv.Unquote(v); err == nil {
+			return u
 		}
 	}
+	if strings.HasPrefix(v, "'") && strings.HasSuffix(v, "'") && len(v) >= 2 {
+		return strings.ReplaceAll(v[1:len(v)-1], "''", "'")
+	}
 	return strings.TrimSpace(v)
+}
+
+func parseInlineList(val string) []string {
+	content := strings.TrimSpace(val)
+	if !strings.HasPrefix(content, "[") || !strings.HasSuffix(content, "]") {
+		return nil
+	}
+	inner := strings.TrimSpace(content[1 : len(content)-1])
+	if inner == "" {
+		return []string{}
+	}
+
+	var items []string
+	var current strings.Builder
+	inDoubleQuote := false
+	inSingleQuote := false
+	escaped := false
+
+	for i := 0; i < len(inner); i++ {
+		ch := inner[i]
+
+		if inDoubleQuote {
+			current.WriteByte(ch)
+			if escaped {
+				escaped = false
+			} else if ch == '\\' {
+				escaped = true
+			} else if ch == '"' {
+				inDoubleQuote = false
+			}
+			continue
+		}
+
+		if inSingleQuote {
+			current.WriteByte(ch)
+			if ch == '\'' {
+				if i+1 < len(inner) && inner[i+1] == '\'' {
+					current.WriteByte('\'')
+					i++
+				} else {
+					inSingleQuote = false
+				}
+			}
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inDoubleQuote = true
+			current.WriteByte(ch)
+		case '\'':
+			inSingleQuote = true
+			current.WriteByte(ch)
+		case ',':
+			v := cleanValue(current.String())
+			if v != "" {
+				items = append(items, v)
+			}
+			current.Reset()
+		default:
+			current.WriteByte(ch)
+		}
+	}
+
+	if current.Len() > 0 {
+		v := cleanValue(current.String())
+		if v != "" {
+			items = append(items, v)
+		}
+	}
+
+	return items
+}
+
+func formatYAMLString(s string) string {
+	// If the string contains special characters, quotes, or control characters,
+	// escape it using JSON encoding (standard YAML compatible double-quoted scalar).
+	if strings.ContainsAny(s, ":#\"'\\\n\r\t[]{},&*?|<>=!%@`") ||
+		strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") ||
+		strings.HasPrefix(s, "-") || s == "" {
+		b, err := json.Marshal(s)
+		if err == nil {
+			return string(b)
+		}
+		return strconv.Quote(s)
+	}
+	return s
 }
 
 // FormatMarkdown serializes the frontmatter and body into Markdown content.
@@ -132,22 +222,11 @@ func FormatMarkdown(fm Frontmatter, body string) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 
-	// Escape or quote title if it contains colons, quotes or special chars
-	title := fm.Title
-	if strings.ContainsAny(title, ":#\"'\n\r\t") || strings.HasPrefix(title, " ") || strings.HasSuffix(title, " ") {
-		escaped := strings.ReplaceAll(title, "\"", "\\\"")
-		b.WriteString(fmt.Sprintf("title: \"%s\"\n", escaped))
-	} else {
-		b.WriteString(fmt.Sprintf("title: %s\n", title))
-	}
+	b.WriteString(fmt.Sprintf("title: %s\n", formatYAMLString(fm.Title)))
 
 	b.WriteString("tags:\n")
 	for _, tag := range fm.Tags {
-		if strings.ContainsAny(tag, ":#\"'\n\r\t") {
-			b.WriteString(fmt.Sprintf("  - \"%s\"\n", strings.ReplaceAll(tag, "\"", "\\\"")))
-		} else {
-			b.WriteString(fmt.Sprintf("  - %s\n", tag))
-		}
+		b.WriteString(fmt.Sprintf("  - %s\n", formatYAMLString(tag)))
 	}
 
 	if fm.QiitaID != "" {
@@ -161,7 +240,7 @@ func FormatMarkdown(fm Frontmatter, body string) string {
 	}
 
 	if fm.UpdatedAt != "" {
-		b.WriteString(fmt.Sprintf("updated_at: '%s'\n", fm.UpdatedAt))
+		b.WriteString(fmt.Sprintf("updated_at: '%s'\n", strings.ReplaceAll(fm.UpdatedAt, "'", "''")))
 	}
 
 	b.WriteString("---\n\n")
