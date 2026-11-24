@@ -170,14 +170,9 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 	var updatedFiles []string
 
 	for _, item := range items {
-		itemTags := make([]string, len(item.Tags))
-		for i, t := range item.Tags {
-			itemTags[i] = t.Name
-		}
-
 		fm := Frontmatter{
 			Title:     item.Title,
-			Tags:      itemTags,
+			Tags:      TagNames(item.Tags),
 			QiitaID:   item.ID,
 			Private:   item.Private,
 			UpdatedAt: item.UpdatedAt,

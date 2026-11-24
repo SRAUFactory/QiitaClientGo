@@ -123,16 +123,11 @@ func PushSingleFile(client *QiitaClient, filePath string, opts PushOptions, stdo
 		}
 	}
 
-	tags := make([]QiitaTag, len(fm.Tags))
-	for i, t := range fm.Tags {
-		tags[i] = QiitaTag{Name: t}
-	}
-
 	reqData := QiitaItemRequest{
 		Title:   title,
 		Body:    body,
 		Private: fm.Private,
-		Tags:    tags,
+		Tags:    ToQiitaTags(fm.Tags),
 	}
 
 	if fm.QiitaID == "" {

@@ -20,6 +20,24 @@ type QiitaTag struct {
 	Name string `json:"name"`
 }
 
+// TagNames converts a slice of QiitaTag into a slice of tag name strings.
+func TagNames(tags []QiitaTag) []string {
+	names := make([]string, len(tags))
+	for i, t := range tags {
+		names[i] = t.Name
+	}
+	return names
+}
+
+// ToQiitaTags converts a slice of tag name strings into a slice of QiitaTag.
+func ToQiitaTags(names []string) []QiitaTag {
+	tags := make([]QiitaTag, len(names))
+	for i, name := range names {
+		tags[i] = QiitaTag{Name: name}
+	}
+	return tags
+}
+
 // QiitaItem represents a Qiita article retrieved from the API.
 type QiitaItem struct {
 	ID        string     `json:"id"`
