@@ -5,9 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -47,7 +47,7 @@ func RunDiffCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 type gitDiffRunner func(base string) (string, error)
 
 func runGitDiff(base string) (string, error) {
-	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=ACMR", base, "HEAD")
+	cmd := exec.Command("git", "diff", "-z", "--name-only", "--diff-filter=ACMR", base, "HEAD")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -68,40 +68,21 @@ func GetChangedMarkdownFiles(targetDir string, base string, runner gitDiffRunner
 	cleanTargetDir := filepath.Clean(targetDir)
 	var matchedFiles []string
 
-	lines := strings.Split(output, "\n")
-	for _, rawLine := range lines {
-		line := strings.TrimSpace(rawLine)
-		if line == "" {
+	paths := strings.Split(output, "\x00")
+	for _, rawPath := range paths {
+		if rawPath == "" {
 			continue
 		}
 
-		decoded := decodeGitFilename(line)
-		cleanPath := filepath.Clean(decoded)
+		cleanPath := filepath.Clean(rawPath)
 
 		if strings.HasSuffix(cleanPath, ".md") {
-			// Check if cleanPath is inside cleanTargetDir or equals targetDir
 			rel, err := filepath.Rel(cleanTargetDir, cleanPath)
-			if err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
-				matchedFiles = append(matchedFiles, cleanPath)
-			} else if cleanTargetDir == "." || cleanTargetDir == "" {
+			if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 				matchedFiles = append(matchedFiles, cleanPath)
 			}
 		}
 	}
 
 	return matchedFiles, nil
-}
-
-// decodeGitFilename unquotes C-style octal escape sequences that git emits when core.quotepath is true.
-func decodeGitFilename(name string) string {
-	if strings.HasPrefix(name, "\"") && strings.HasSuffix(name, "\"") {
-		// Use strconv.Unquote to decode octal escapes
-		unquoted, err := strconv.Unquote(name)
-		if err == nil {
-			return unquoted
-		}
-		// Fallback: strip surrounding quotes
-		return name[1 : len(name)-1]
-	}
-	return name
 }

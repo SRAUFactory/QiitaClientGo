@@ -3,16 +3,22 @@ package main
 import (
 	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 )
 
 func TestGetChangedMarkdownFiles(t *testing.T) {
-	mockGitOutput := `qiita/article1.md
-qiita/other.txt
-"qiita/\346\227\245\346\234\254\350\252\236\350\250\230\344\272\213.md"
-src/main.go
-qiita/nested/article2.md
-`
+	mockFiles := []string{
+		"qiita/article1.md",
+		"qiita/other.txt",
+		"qiita/日本語記事.md",
+		"qiita/space in name.md",
+		"src/main.go",
+		"qiita/nested/article2.md",
+		"qiita/..foo.md",
+		"",
+	}
+	mockGitOutput := strings.Join(mockFiles, "\x00")
 
 	mockRunner := func(base string) (string, error) {
 		return mockGitOutput, nil
@@ -26,7 +32,9 @@ qiita/nested/article2.md
 	expected := []string{
 		"qiita/article1.md",
 		"qiita/日本語記事.md",
+		"qiita/space in name.md",
 		"qiita/nested/article2.md",
+		"qiita/..foo.md",
 	}
 
 	if !reflect.DeepEqual(files, expected) {
