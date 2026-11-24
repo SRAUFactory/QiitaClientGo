@@ -12,9 +12,7 @@ import (
 
 // PushOptions holds options for the push subcommand.
 type PushOptions struct {
-	Token  string
 	DryRun bool
-	Files  []string
 }
 
 // RunPushCommand executes the push subcommand.
@@ -31,10 +29,8 @@ func RunPushCommand(args []string, stdin io.Reader, stdout io.Writer, stderr io.
 		return 1
 	}
 
-	if token == "" {
-		token = os.Getenv("QIITA_TOKEN")
-	}
-	if token == "" && !dryRun {
+	resolvedToken := resolveToken(token)
+	if resolvedToken == "" && !dryRun {
 		fmt.Fprintln(stderr, "Error: Qiita API token is required. Set QIITA_TOKEN environment variable or use -token.")
 		return 1
 	}
@@ -42,18 +38,16 @@ func RunPushCommand(args []string, stdin io.Reader, stdout io.Writer, stderr io.
 	var targetFiles []string
 	posArgs := fs.Args()
 
+	readStdin := len(posArgs) == 0
 	for _, arg := range posArgs {
 		if arg == "-" {
-			// Read from stdin
-			stdinFiles := readLinesFromReader(stdin)
-			targetFiles = append(targetFiles, stdinFiles...)
+			readStdin = true
 		} else {
 			targetFiles = append(targetFiles, arg)
 		}
 	}
 
-	// If no positional arguments given, try reading from stdin (pipe mode)
-	if len(posArgs) == 0 {
+	if readStdin {
 		stdinFiles := readLinesFromReader(stdin)
 		targetFiles = append(targetFiles, stdinFiles...)
 	}
@@ -63,11 +57,9 @@ func RunPushCommand(args []string, stdin io.Reader, stdout io.Writer, stderr io.
 		return 0
 	}
 
-	client := NewQiitaClient(token, "", DefaultTimeout)
+	client := NewQiitaClient(resolvedToken, "", DefaultTimeout)
 	opts := PushOptions{
-		Token:  token,
 		DryRun: dryRun,
-		Files:  targetFiles,
 	}
 
 	hasError := false

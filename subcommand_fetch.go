@@ -56,6 +56,14 @@ type FetchOptions struct {
 	Timeout time.Duration
 }
 
+// resolveToken resolves the Qiita API token from the flag value or the QIITA_TOKEN environment variable.
+func resolveToken(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return os.Getenv("QIITA_TOKEN")
+}
+
 // RunFetchCommand executes the fetch subcommand.
 func RunFetchCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
@@ -70,15 +78,13 @@ func RunFetchCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	if token == "" {
-		token = os.Getenv("QIITA_TOKEN")
-	}
-	if token == "" {
+	resolvedToken := resolveToken(token)
+	if resolvedToken == "" {
 		fmt.Fprintln(stderr, "Error: Qiita API token is required. Set QIITA_TOKEN environment variable or use -token.")
 		return 1
 	}
 
-	client := NewQiitaClient(token, "", DefaultTimeout)
+	client := NewQiitaClient(resolvedToken, "", DefaultTimeout)
 	opts := FetchOptions{
 		Dir: dir,
 	}
