@@ -126,18 +126,24 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 	idToFile := make(map[string]localFileInfo)
 	titleToFile := make(map[string]string)
 
-	_ = filepath.WalkDir(opts.Dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+	err = filepath.WalkDir(opts.Dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			fmt.Fprintf(stderr, "  WARNING: Failed to access %s: %v\n", path, walkErr)
+			return nil
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
 			return nil
 		}
 
 		content, readErr := os.ReadFile(path)
 		if readErr != nil {
+			fmt.Fprintf(stderr, "  WARNING: Failed to read %s: %v\n", path, readErr)
 			return nil
 		}
 
 		fm, _, parseErr := ParseMarkdown(string(content))
 		if parseErr != nil {
+			fmt.Fprintf(stderr, "  WARNING: Failed to parse frontmatter in %s: %v\n", path, parseErr)
 			return nil
 		}
 
@@ -152,6 +158,9 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan directory %s: %w", opts.Dir, err)
+	}
 
 	var updatedFiles []string
 

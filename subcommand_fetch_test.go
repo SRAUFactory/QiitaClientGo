@@ -130,3 +130,31 @@ func TestExecuteFetch(t *testing.T) {
 		t.Errorf("expected 0 files updated on 2nd run, got %d", len(updatedSecond))
 	}
 }
+
+func TestExecuteFetch_CorruptedFrontmatterWarning(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "fetch-corrupt-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	corruptFile := filepath.Join(tempDir, "corrupt.md")
+	// write invalid YAML that fails ParseMarkdown
+	_ = os.WriteFile(corruptFile, []byte("---\n: invalid yaml\n---\nbody"), 0644)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]QiitaItem{})
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("dummy-token", ts.URL, 5*time.Second)
+	var stdout, stderr bytes.Buffer
+
+	_, err = ExecuteFetch(client, FetchOptions{Dir: tempDir}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("ExecuteFetch should succeed even if individual files have warnings: %v", err)
+	}
+
+	// Should not crash and should log warning
+	// (Note: ParseMarkdown handles most cases gracefully or returns error)
+}

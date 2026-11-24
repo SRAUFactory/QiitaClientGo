@@ -48,7 +48,11 @@ func RunPushCommand(args []string, stdin io.Reader, stdout io.Writer, stderr io.
 	}
 
 	if readStdin {
-		stdinFiles := readLinesFromReader(stdin)
+		stdinFiles, err := readLinesFromReader(stdin)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error reading from stdin: %v\n", err)
+			return 1
+		}
 		targetFiles = append(targetFiles, stdinFiles...)
 	}
 
@@ -81,9 +85,9 @@ func RunPushCommand(args []string, stdin io.Reader, stdout io.Writer, stderr io.
 	return 0
 }
 
-func readLinesFromReader(r io.Reader) []string {
+func readLinesFromReader(r io.Reader) ([]string, error) {
 	if r == nil {
-		return nil
+		return nil, nil
 	}
 	var lines []string
 	scanner := bufio.NewScanner(r)
@@ -93,7 +97,10 @@ func readLinesFromReader(r io.Reader) []string {
 			lines = append(lines, line)
 		}
 	}
-	return lines
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return lines, nil
 }
 
 // PushSingleFile handles posting or updating a single Markdown file to Qiita.
