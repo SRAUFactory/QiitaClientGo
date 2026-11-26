@@ -211,9 +211,11 @@ func formatYAMLString(s string) string {
 	if strings.ContainsAny(s, ":#\"'\\\n\r\t[]{},&*?|<>=!%@`") ||
 		strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") ||
 		strings.HasPrefix(s, "-") || s == "" {
-		b, err := json.Marshal(s)
-		if err == nil {
-			return string(b)
+		var buf strings.Builder
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(s); err == nil {
+			return strings.TrimSuffix(buf.String(), "\n")
 		}
 		return strconv.Quote(s)
 	}

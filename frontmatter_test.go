@@ -269,3 +269,47 @@ body`,
 		}
 	})
 }
+
+func TestFormatMarkdown_NoHTMLEscape(t *testing.T) {
+	tests := []struct {
+		name      string
+		fm        Frontmatter
+		wantLines []string
+	}{
+		{
+			name: "Ampersand and angle brackets in title and tags",
+			fm: Frontmatter{
+				Title: "A & B: List<T> の使い方",
+				Tags:  []string{"C++", "A&B", "List<T>", "x>y"},
+			},
+			wantLines: []string{
+				`title: "A & B: List<T> の使い方"`,
+				`  - "A&B"`,
+				`  - "List<T>"`,
+				`  - "x>y"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			formatted := FormatMarkdown(tt.fm, "Body\n")
+			for _, wantLine := range tt.wantLines {
+				if !strings.Contains(formatted, wantLine) {
+					t.Errorf("formatted markdown does not contain %q\nGot:\n%s", wantLine, formatted)
+				}
+			}
+			if strings.Contains(formatted, `\u0026`) || strings.Contains(formatted, `\u003c`) || strings.Contains(formatted, `\u003e`) {
+				t.Errorf("formatted markdown should not contain HTML unicode escapes:\n%s", formatted)
+			}
+
+			parsedFm, _, err := ParseMarkdown(formatted)
+			if err != nil {
+				t.Fatalf("ParseMarkdown failed: %v", err)
+			}
+			if !reflect.DeepEqual(parsedFm, tt.fm) {
+				t.Errorf("Roundtrip mismatch: got %#v, want %#v", parsedFm, tt.fm)
+			}
+		})
+	}
+}
