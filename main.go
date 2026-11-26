@@ -10,6 +10,14 @@ var (
 	Version = "1.0.0"
 )
 
+// resolveToken resolves the Qiita API token from the flag value or the QIITA_TOKEN environment variable.
+func resolveToken(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return os.Getenv("QIITA_TOKEN")
+}
+
 func printUsage() {
 	usage := `qiita-client is a CLI tool for syncing Markdown articles with Qiita.
 

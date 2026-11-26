@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 )
 
 var invalidFilenameRegex = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
@@ -50,18 +49,7 @@ func IsPathSafe(baseDir string, candidatePath string) bool {
 
 // FetchOptions configures the fetch subcommand.
 type FetchOptions struct {
-	Dir     string
-	Token   string
-	BaseURL string
-	Timeout time.Duration
-}
-
-// resolveToken resolves the Qiita API token from the flag value or the QIITA_TOKEN environment variable.
-func resolveToken(flagValue string) string {
-	if flagValue != "" {
-		return flagValue
-	}
-	return os.Getenv("QIITA_TOKEN")
+	Dir string
 }
 
 // RunFetchCommand executes the fetch subcommand.
@@ -129,6 +117,9 @@ func ExecuteFetch(client *QiitaClient, opts FetchOptions, stdout io.Writer, stde
 
 	err = filepath.WalkDir(opts.Dir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if path == opts.Dir {
+				return walkErr
+			}
 			fmt.Fprintf(stderr, "  WARNING: Failed to access %s: %v\n", path, walkErr)
 			return nil
 		}

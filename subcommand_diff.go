@@ -11,12 +11,6 @@ import (
 	"strings"
 )
 
-// DiffOptions specifies parameters for git diff inspection.
-type DiffOptions struct {
-	Dir  string
-	Base string
-}
-
 // RunDiffCommand executes the diff subcommand.
 func RunDiffCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
