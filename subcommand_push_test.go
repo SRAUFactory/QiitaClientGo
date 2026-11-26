@@ -71,10 +71,11 @@ func TestPushSingleFile_UpdateArticle(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
+	const validID = "0123456789abcdef0123"
 	testFile := filepath.Join(tempDir, "existing_post.md")
 	initialContent := FormatMarkdown(Frontmatter{
 		Title:   "既存記事",
-		QiitaID: "existing-id-123",
+		QiitaID: validID,
 		Tags:    []string{"Go"},
 	}, "更新前の本文")
 	if err := os.WriteFile(testFile, []byte(initialContent), 0644); err != nil {
@@ -86,12 +87,12 @@ func TestPushSingleFile_UpdateArticle(t *testing.T) {
 		if r.Method != http.MethodPatch {
 			t.Errorf("expected PATCH, got %s", r.Method)
 		}
-		if r.URL.Path != "/items/existing-id-123" {
-			t.Errorf("expected /items/existing-id-123, got %s", r.URL.Path)
+		if r.URL.Path != "/items/"+validID {
+			t.Errorf("expected /items/%s, got %s", validID, r.URL.Path)
 		}
 		patchCalled = true
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(QiitaItem{ID: "existing-id-123"})
+		_ = json.NewEncoder(w).Encode(QiitaItem{ID: validID})
 	}))
 	defer ts.Close()
 
@@ -105,6 +106,50 @@ func TestPushSingleFile_UpdateArticle(t *testing.T) {
 
 	if !patchCalled {
 		t.Errorf("expected PATCH to be called")
+	}
+}
+
+func TestPushSingleFile_InvalidQiitaID(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "push-invalid-id-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	apiCalled := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiCalled = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("test-token", ts.URL, 5*time.Second)
+
+	invalidIDs := []string{
+		"../authenticated_user",
+		"abc/def",
+		"INVALIDUPPERCASE1234",
+		"short",
+	}
+
+	for _, badID := range invalidIDs {
+		testFile := filepath.Join(tempDir, "bad.md")
+		content := FormatMarkdown(Frontmatter{
+			Title:   "Bad ID Test",
+			QiitaID: badID,
+		}, "Body")
+		if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		var stdout, stderr bytes.Buffer
+		err := PushSingleFile(client, testFile, PushOptions{}, &stdout, &stderr)
+		if err == nil {
+			t.Errorf("expected error for invalid qiita_id %q, got nil", badID)
+		}
+		if apiCalled {
+			t.Errorf("API should not be called for invalid qiita_id %q", badID)
+		}
 	}
 }
 

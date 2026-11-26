@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+var validQiitaIDRegex = regexp.MustCompile(`^[a-z0-9]{16,32}$`)
 
 // PushOptions holds options for the push subcommand.
 type PushOptions struct {
@@ -154,6 +157,11 @@ func PushSingleFile(client *QiitaClient, filePath string, opts PushOptions, stdo
 		}
 		fmt.Fprintf(stdout, "  → Saved qiita_id back to %s\n", filePath)
 	} else {
+		// Validate qiita_id format before making any API call
+		if !validQiitaIDRegex.MatchString(fm.QiitaID) {
+			return fmt.Errorf("invalid qiita_id format %q in %s (expected 16-32 lowercase alphanumeric characters)", fm.QiitaID, filePath)
+		}
+
 		// Update existing post
 		fmt.Fprintf(stdout, "Updating article: %s (qiita_id: %s, file: %s)\n", title, fm.QiitaID, filePath)
 		if opts.DryRun {

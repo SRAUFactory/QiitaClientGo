@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -95,8 +96,8 @@ func (c *QiitaClient) do(method, path string, in, out any) error {
 		bodyReader = bytes.NewReader(payload)
 	}
 
-	url := fmt.Sprintf("%s%s", c.baseURL, path)
-	req, err := http.NewRequest(method, url, bodyReader)
+	reqURL := fmt.Sprintf("%s%s", c.baseURL, path)
+	req, err := http.NewRequest(method, reqURL, bodyReader)
 	if err != nil {
 		return fmt.Errorf("failed to create request for %s %s: %w", method, path, err)
 	}
@@ -166,7 +167,7 @@ func (c *QiitaClient) CreateItem(reqData QiitaItemRequest) (*QiitaItem, error) {
 
 // UpdateItem updates an existing Qiita article (PATCH /items/{id}).
 func (c *QiitaClient) UpdateItem(id string, reqData QiitaItemRequest) (*QiitaItem, error) {
-	path := fmt.Sprintf("/items/%s", id)
+	path := fmt.Sprintf("/items/%s", url.PathEscape(id))
 	var item QiitaItem
 	if err := c.do(http.MethodPatch, path, reqData, &item); err != nil {
 		return nil, fmt.Errorf("failed to update item %s: %w", id, err)

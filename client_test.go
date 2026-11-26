@@ -225,3 +225,34 @@ func TestQiitaClient_InvalidJSONResponse(t *testing.T) {
 		}
 	}
 }
+
+func TestQiitaClient_UpdateItem_PathEscape(t *testing.T) {
+	var receivedEscapedPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedEscapedPath = r.URL.EscapedPath()
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(QiitaItem{ID: "safe"})
+	}))
+	defer ts.Close()
+
+	client := NewQiitaClient("test-token", ts.URL, 5*time.Second)
+	maliciousIDs := []string{
+		"../authenticated_user",
+		"abc/def",
+		"id?extra=1",
+	}
+
+	for _, id := range maliciousIDs {
+		receivedEscapedPath = ""
+		_, err := client.UpdateItem(id, QiitaItemRequest{Title: "Test"})
+		if err != nil {
+			t.Fatalf("UpdateItem(%q) unexpected error: %v", id, err)
+		}
+		if !strings.HasPrefix(receivedEscapedPath, "/items/") {
+			t.Errorf("UpdateItem(%q) escaped out of /items/ path: got %q", id, receivedEscapedPath)
+		}
+		if receivedEscapedPath == "/authenticated_user" {
+			t.Errorf("UpdateItem(%q) traversed to /authenticated_user", id)
+		}
+	}
+}
