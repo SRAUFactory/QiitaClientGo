@@ -244,6 +244,20 @@ body`,
 				Tags:  []string{"ok"},
 			},
 		},
+		{
+			name: "Legacy Go-specific escapes remain literal (C:\\app, C:\\vendor, D:\\apache\\bin)",
+			content: `---
+title: "Dir: C:\app"
+tags:
+  - "Dir: C:\vendor"
+  - "Dir: D:\apache\bin"
+---
+body`,
+			want: Frontmatter{
+				Title: `Dir: C:\app`,
+				Tags:  []string{`Dir: C:\vendor`, `Dir: D:\apache\bin`},
+			},
+		},
 	}
 
 	for _, tt := range tests {

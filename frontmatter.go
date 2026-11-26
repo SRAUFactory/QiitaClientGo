@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -120,9 +119,6 @@ func cleanValue(val string) string {
 		if err := json.Unmarshal([]byte(v), &out); err == nil {
 			return out
 		}
-		if u, err := strconv.Unquote(v); err == nil {
-			return u
-		}
 		// Fallback for v1.0.0 legacy format where only '"' was escaped as '\"'
 		// and backslashes were left unescaped (e.g., "Path: D:\users").
 		return strings.ReplaceAll(v[1:len(v)-1], "\\\"", "\"")
@@ -214,10 +210,8 @@ func formatYAMLString(s string) string {
 		var buf strings.Builder
 		enc := json.NewEncoder(&buf)
 		enc.SetEscapeHTML(false)
-		if err := enc.Encode(s); err == nil {
-			return strings.TrimSuffix(buf.String(), "\n")
-		}
-		return strconv.Quote(s)
+		_ = enc.Encode(s)
+		return strings.TrimSuffix(buf.String(), "\n")
 	}
 	return s
 }
