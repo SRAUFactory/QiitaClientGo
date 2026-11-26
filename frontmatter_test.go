@@ -198,3 +198,74 @@ func TestFormatMarkdown_RoundTripEscaping(t *testing.T) {
 		})
 	}
 }
+
+func TestParseMarkdown_LegacyV100Compatibility(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    Frontmatter
+	}{
+		{
+			name: "Legacy invalid JSON escape in title (Path: D:\\users)",
+			content: `---
+title: "Path: D:\users"
+tags:
+  - "Tag: C:\work"
+---
+body`,
+			want: Frontmatter{
+				Title: `Path: D:\users`,
+				Tags:  []string{`Tag: C:\work`},
+			},
+		},
+		{
+			name: "Legacy escaped quotes with backslash in title",
+			content: `---
+title: "He said \"hi\" from D:\dir"
+tags:
+  - "a\c"
+---
+body`,
+			want: Frontmatter{
+				Title: `He said "hi" from D:\dir`,
+				Tags:  []string{`a\c`},
+			},
+		},
+		{
+			name: "Legacy valid-looking JSON escapes prioritize new format (\\n and \\t)",
+			content: `---
+title: "Notes: C:\new\table"
+tags:
+  - "ok"
+---
+body`,
+			want: Frontmatter{
+				Title: "Notes: C:\new\table",
+				Tags:  []string{"ok"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fm, _, err := ParseMarkdown(tt.content)
+			if err != nil {
+				t.Fatalf("ParseMarkdown failed: %v", err)
+			}
+			if !reflect.DeepEqual(fm, tt.want) {
+				t.Errorf("ParseMarkdown() = %#v, want %#v", fm, tt.want)
+			}
+		})
+	}
+
+	t.Run("Legacy backslash in inline tags", func(t *testing.T) {
+		inline := "---\ntitle: \"Path: D:\\users\"\ntags: [Windows, \"D:\\data\"]\n---\nbody\n"
+		fmInline, _, err := ParseMarkdown(inline)
+		if err != nil {
+			t.Fatalf("ParseMarkdown inline failed: %v", err)
+		}
+		if !reflect.DeepEqual(fmInline.Tags, []string{"Windows", `D:\data`}) {
+			t.Errorf("Inline Tags = %#v, want %#v", fmInline.Tags, []string{"Windows", `D:\data`})
+		}
+	})
+}

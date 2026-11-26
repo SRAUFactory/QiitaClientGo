@@ -123,6 +123,9 @@ func cleanValue(val string) string {
 		if u, err := strconv.Unquote(v); err == nil {
 			return u
 		}
+		// Fallback for v1.0.0 legacy format where only '"' was escaped as '\"'
+		// and backslashes were left unescaped (e.g., "Path: D:\users").
+		return strings.ReplaceAll(v[1:len(v)-1], "\\\"", "\"")
 	}
 	if strings.HasPrefix(v, "'") && strings.HasSuffix(v, "'") && len(v) >= 2 {
 		return strings.ReplaceAll(v[1:len(v)-1], "''", "'")
