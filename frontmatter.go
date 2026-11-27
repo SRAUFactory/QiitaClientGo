@@ -210,6 +210,7 @@ func formatYAMLString(s string) string {
 		var buf strings.Builder
 		enc := json.NewEncoder(&buf)
 		enc.SetEscapeHTML(false)
+		// String encoding does not fail.
 		_ = enc.Encode(s)
 		return strings.TrimSuffix(buf.String(), "\n")
 	}
