@@ -106,6 +106,16 @@ func readLinesFromReader(r io.Reader) ([]string, error) {
 	return lines, nil
 }
 
+// containsControlChar returns true if s contains ASCII control characters (0x00-0x1f or 0x7f).
+func containsControlChar(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
 // PushSingleFile handles posting or updating a single Markdown file to Qiita.
 func PushSingleFile(client *QiitaClient, filePath string, opts PushOptions, stdout io.Writer, stderr io.Writer) error {
 	content, err := os.ReadFile(filePath)
@@ -123,6 +133,15 @@ func PushSingleFile(client *QiitaClient, filePath string, opts PushOptions, stdo
 		title = strings.TrimSuffix(filepath.Base(filePath), ".md")
 		if title == "" {
 			title = "無題"
+		}
+	}
+
+	if containsControlChar(title) {
+		return fmt.Errorf("title contains a control character in %s: v1.0.0 形式のファイルのバックスラッシュ(例: C:\\new)が改行などに解釈された可能性があります。ファイルのタイトルを確認してください", filePath)
+	}
+	for _, tag := range fm.Tags {
+		if containsControlChar(tag) {
+			return fmt.Errorf("tag %q contains a control character in %s: v1.0.0 形式のファイルのバックスラッシュが制御文字に解釈された可能性があります。ファイルのタグを確認してください", tag, filePath)
 		}
 	}
 
